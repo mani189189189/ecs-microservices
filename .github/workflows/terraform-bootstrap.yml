@@ -2,10 +2,19 @@ name: Terraform Bootstrap Infrastructure
 
 on:
   workflow_dispatch:
+    inputs:
+      action:
+        description: "Choose Terraform action"
+        required: true
+        default: "apply"
+        type: choice
+        options:
+          - apply
+          - destroy
 
 jobs:
   terraform:
-    name: Apply Infrastructure
+    name: Run Terraform ${{ inputs.action }}
     runs-on: ubuntu-latest
 
     permissions:
@@ -38,9 +47,16 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan
+        run: terraform plan -destroy=${{ inputs.action == 'destroy' }}
 
-      - name: Terraform Apply
+      - name: Terraform Apply or Destroy
         working-directory: ./terraform
-        run: terraform apply -auto-approve
-
+        run: |
+          if [ "${{ inputs.action }}" == "apply" ]; then
+            terraform apply -auto-approve
+          elif [ "${{ inputs.action }}" == "destroy" ]; then
+            terraform destroy -auto-approve
+          else
+            echo "Invalid action input"
+            exit 1
+          fi

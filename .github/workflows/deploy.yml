@@ -36,21 +36,42 @@ jobs:
         run: |
           aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-      - name: Build Auth Service Docker Image
+      ######################
+      # AUTH SERVICE
+      ######################
+      - name: Build Auth Service Docker Image (No Cache)
         run: |
-          docker build -t $ECR_REPO_AUTH ./services/auth-service
+          docker build --no-cache -t $ECR_REPO_AUTH ./services/auth-service
           docker tag $ECR_REPO_AUTH:latest $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_AUTH:latest
 
       - name: Push Auth Service to ECR
         run: |
           docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_AUTH:latest
 
-      - name: Build User Service Docker Image
+      - name: Force ECS Redeploy for Auth Service
         run: |
-          docker build -t $ECR_REPO_USER ./services/user-service
+          aws ecs update-service \
+            --cluster ecs-microservice-cluster \
+            --service auth-service \
+            --force-new-deployment \
+            --region $AWS_REGION
+
+      ######################
+      # USER SERVICE
+      ######################
+      - name: Build User Service Docker Image (No Cache)
+        run: |
+          docker build --no-cache -t $ECR_REPO_USER ./services/user-service
           docker tag $ECR_REPO_USER:latest $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_USER:latest
 
       - name: Push User Service to ECR
         run: |
           docker push $ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$ECR_REPO_USER:latest
 
+      - name: Force ECS Redeploy for User Service
+        run: |
+          aws ecs update-service \
+            --cluster ecs-microservice-cluster \
+            --service user-service \
+            --force-new-deployment \
+            --region $AWS_REGION

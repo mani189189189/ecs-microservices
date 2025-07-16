@@ -3,6 +3,14 @@ provider "aws" {
 }
 
 ##############################
+# Availability Zones
+##############################
+
+data "aws_availability_zones" "available" {
+  state = "available"
+}
+
+##############################
 # VPC & Networking
 ##############################
 
@@ -15,6 +23,7 @@ resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = var.public_subnet_cidrs[count.index]
   map_public_ip_on_launch = true
+  availability_zone       = data.aws_availability_zones.available.names[count.index]
 }
 
 resource "aws_internet_gateway" "igw" {
@@ -292,4 +301,3 @@ resource "aws_ecs_service" "user" {
 
   depends_on = [aws_lb_listener_rule.user_rule]
 }
-

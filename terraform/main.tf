@@ -11,7 +11,7 @@ data "aws_availability_zones" "available" {
 }
 
 resource "aws_s3_bucket" "tf_state" {
-  bucket = "ecs-"
+  bucket = "ecs-buckettfstore"
   versioning {
     enabled = true
   }

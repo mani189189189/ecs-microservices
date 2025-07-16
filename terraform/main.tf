@@ -122,10 +122,12 @@ resource "aws_lb_listener" "http" {
 # ECR Repositories
 resource "aws_ecr_repository" "auth" {
   name = "auth-service"
+  force_delete = true
 }
 
 resource "aws_ecr_repository" "user" {
   name = "user-service"
+  force_delete = true
 }
 
 # Target Groups

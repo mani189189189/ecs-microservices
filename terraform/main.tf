@@ -2,21 +2,20 @@ provider "aws" {
   region = var.region
 }
 
-##############################
-# Availability Zones
-##############################
-
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
+# S3 for remote state
 resource "aws_s3_bucket" "tf_state" {
   bucket = "ecs-buckettfstore"
+
   versioning {
     enabled = true
   }
 }
 
+# DynamoDB for state locking
 resource "aws_dynamodb_table" "tf_locks" {
   name         = "terraform-locks"
   billing_mode = "PAY_PER_REQUEST"
@@ -28,14 +27,12 @@ resource "aws_dynamodb_table" "tf_locks" {
   }
 }
 
-##############################
-# VPC & Networking
-##############################
-
+# VPC
 resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
 }
 
+# Public Subnets
 resource "aws_subnet" "public" {
   count                   = length(var.public_subnet_cidrs)
   vpc_id                  = aws_vpc.main.id
@@ -44,10 +41,12 @@ resource "aws_subnet" "public" {
   availability_zone       = data.aws_availability_zones.available.names[count.index]
 }
 
+# Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
 }
 
+# Route Table
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.main.id
 }
@@ -64,18 +63,12 @@ resource "aws_route_table_association" "public_subnets" {
   route_table_id = aws_route_table.public_rt.id
 }
 
-##############################
 # ECS Cluster
-##############################
-
 resource "aws_ecs_cluster" "main" {
   name = "ecs-microservice-cluster"
 }
 
-##############################
 # IAM Role for ECS
-##############################
-
 resource "aws_iam_role" "ecs_task_execution" {
   name = "ecsTaskExecutionRole"
 
@@ -96,10 +89,7 @@ resource "aws_iam_role_policy_attachment" "ecs_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-##############################
-# ALB
-##############################
-
+# ALB Security Group (includes port 80 and 3000)
 resource "aws_security_group" "alb_sg" {
   name   = "alb-sg"
   vpc_id = aws_vpc.main.id
@@ -107,6 +97,13 @@ resource "aws_security_group" "alb_sg" {
   ingress {
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 3000
+    to_port     = 3000
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
@@ -119,6 +116,7 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
+# Application Load Balancer
 resource "aws_lb" "main" {
   name               = "ecs-ms-alb"
   internal           = false
@@ -142,10 +140,7 @@ resource "aws_lb_listener" "http" {
   }
 }
 
-##############################
 # ECR Repositories
-##############################
-
 resource "aws_ecr_repository" "auth" {
   name = "auth-service"
 }
@@ -154,10 +149,7 @@ resource "aws_ecr_repository" "user" {
   name = "user-service"
 }
 
-##############################
 # Target Groups
-##############################
-
 resource "aws_lb_target_group" "auth" {
   name        = "tg-auth"
   port        = 3000
@@ -192,10 +184,7 @@ resource "aws_lb_target_group" "user" {
   }
 }
 
-##############################
 # Listener Rules
-##############################
-
 resource "aws_lb_listener_rule" "auth_rule" {
   listener_arn = aws_lb_listener.http.arn
   priority     = 10
@@ -228,10 +217,7 @@ resource "aws_lb_listener_rule" "user_rule" {
   }
 }
 
-##############################
-# ECS Task Definitions
-##############################
-
+# Task Definitions
 resource "aws_ecs_task_definition" "auth" {
   family                   = "auth-task"
   network_mode             = "awsvpc"
@@ -240,16 +226,14 @@ resource "aws_ecs_task_definition" "auth" {
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
 
-  container_definitions = jsonencode([
-    {
-      name      = "auth"
-      image     = "${aws_ecr_repository.auth.repository_url}:latest"
-      portMappings = [{
-        containerPort = 3000,
-        protocol      = "tcp"
-      }]
-    }
-  ])
+  container_definitions = jsonencode([{
+    name      = "auth"
+    image     = "${aws_ecr_repository.auth.repository_url}:latest"
+    portMappings = [{
+      containerPort = 3000
+      protocol      = "tcp"
+    }]
+  }])
 }
 
 resource "aws_ecs_task_definition" "user" {
@@ -260,22 +244,17 @@ resource "aws_ecs_task_definition" "user" {
   memory                   = "512"
   execution_role_arn       = aws_iam_role.ecs_task_execution.arn
 
-  container_definitions = jsonencode([
-    {
-      name      = "user"
-      image     = "${aws_ecr_repository.user.repository_url}:latest"
-      portMappings = [{
-        containerPort = 3000,
-        protocol      = "tcp"
-      }]
-    }
-  ])
+  container_definitions = jsonencode([{
+    name      = "user"
+    image     = "${aws_ecr_repository.user.repository_url}:latest"
+    portMappings = [{
+      containerPort = 3000
+      protocol      = "tcp"
+    }]
+  }])
 }
 
-##############################
 # ECS Services
-##############################
-
 resource "aws_ecs_service" "auth" {
   name            = "auth-service"
   cluster         = aws_ecs_cluster.main.id

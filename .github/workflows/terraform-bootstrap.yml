@@ -47,7 +47,12 @@ jobs:
 
       - name: Terraform Plan
         working-directory: ./terraform
-        run: terraform plan -destroy=${{ inputs.action == 'destroy' }}
+        run: |
+          if [ "${{ inputs.action }}" == "destroy" ]; then
+            terraform plan -destroy
+          else
+            terraform plan
+          fi
 
       - name: Terraform Apply or Destroy
         working-directory: ./terraform
